@@ -13,6 +13,15 @@ function prepareIts {
   start_xvfb
 }
 
+function installMaven33 {
+  mkdir ~/maven
+  curl -sSL http://apache.mirrors.ovh.net/ftp.apache.org/dist/maven/maven-3/3.3.3/binaries/apache-maven-3.3.3-bin.tar.gz | tar zx -C ~/maven
+  export M2_HOME=~/maven/apache-maven-3.3.3
+  export PATH=$M2_HOME/bin:$PATH
+}
+
+installMaven33
+
 case "$JOB" in
 
 H2)
