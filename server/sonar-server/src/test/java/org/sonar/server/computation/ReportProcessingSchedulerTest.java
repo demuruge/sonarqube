@@ -36,12 +36,12 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-public class ComputationThreadLauncherTest {
+public class ReportProcessingSchedulerTest {
 
   @Rule
   public TestRule timeout = new DisableOnDebug(Timeout.seconds(60));
 
-  ComputationThreadLauncher underTest;
+  ReportProcessingScheduler underTest;
   ReportQueue queue;
   ComponentContainer componentContainer;
   ContainerFactory containerFactory;
@@ -60,7 +60,7 @@ public class ComputationThreadLauncherTest {
 
   @Test
   public void call_findAndBook_when_launching_a_recurrent_task() throws Exception {
-    underTest = new ComputationThreadLauncher(queue, componentContainer, containerFactory, 0, 1, TimeUnit.MILLISECONDS);
+    underTest = new ReportProcessingScheduler(batchExecutorService, processingQueue, queue, componentContainer, containerFactory, 0, 1, TimeUnit.MILLISECONDS);
 
     underTest.onServerStart(mock(Server.class));
 
@@ -71,7 +71,7 @@ public class ComputationThreadLauncherTest {
 
   @Test
   public void call_findAndBook_when_executing_task_immediately() throws Exception {
-    underTest = new ComputationThreadLauncher(queue, componentContainer, containerFactory, 1, 1, TimeUnit.HOURS);
+    underTest = new ReportProcessingScheduler(batchExecutorService, processingQueue, queue, componentContainer, containerFactory, 1, 1, TimeUnit.HOURS);
     underTest.start();
 
     underTest.startAnalysisTaskNow();
@@ -83,7 +83,7 @@ public class ComputationThreadLauncherTest {
 
   @Test
   public void test_real_constructor() throws Exception {
-    underTest = new ComputationThreadLauncher(queue, componentContainer);
+    underTest = new ReportProcessingScheduler(batchExecutorService, processingQueue, queue, componentContainer);
     underTest.start();
   }
 

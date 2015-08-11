@@ -21,35 +21,35 @@
 package org.sonar.server.computation;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import org.picocontainer.Startable;
 import org.sonar.api.platform.Server;
 import org.sonar.api.platform.ServerStartHandler;
 import org.sonar.core.platform.ComponentContainer;
 import org.sonar.server.computation.container.ContainerFactory;
 import org.sonar.server.computation.container.ContainerFactoryImpl;
 
-public class ComputationThreadLauncher implements Startable, ServerStartHandler {
+/**
+ * Adds tasks to the Compute Engine to process batch reports.
+ */
+public class ReportProcessingScheduler implements ServerStartHandler {
 
-  public static final String THREAD_NAME_PREFIX = "computation-";
-
+  private final ComputeEngineBatchExecutorService batchExecutorService;
+  private final ComputeEngineProcessingQueue processingQueue;
   private final ReportQueue queue;
   private final ComponentContainer sqContainer;
-  private final ScheduledExecutorService executorService;
   private final ContainerFactory containerFactory;
 
   private final long delayBetweenTasks;
   private final long delayForFirstStart;
   private final TimeUnit timeUnit;
 
-  public ComputationThreadLauncher(ReportQueue queue, ComponentContainer sqContainer) {
+  public ReportProcessingScheduler(ComputeEngineBatchExecutorService batchExecutorService,
+                                   ComputeEngineProcessingQueue processingQueue,
+                                   ReportQueue queue, ComponentContainer sqContainer) {
+    this.batchExecutorService = batchExecutorService;
+    this.processingQueue = processingQueue;
     this.queue = queue;
     this.sqContainer = sqContainer;
-    this.executorService = Executors.newSingleThreadScheduledExecutor(newThreadFactory());
     this.containerFactory = new ContainerFactoryImpl();
 
     this.delayBetweenTasks = 10;
@@ -58,39 +58,34 @@ public class ComputationThreadLauncher implements Startable, ServerStartHandler 
   }
 
   @VisibleForTesting
-  ComputationThreadLauncher(ReportQueue queue, ComponentContainer sqContainer, ContainerFactory containerFactory,
-    long delayForFirstStart, long delayBetweenTasks, TimeUnit timeUnit) {
+  ReportProcessingScheduler(ComputeEngineBatchExecutorService batchExecutorService,
+                            ComputeEngineProcessingQueue processingQueue,
+                            ReportQueue queue, ComponentContainer sqContainer, ContainerFactory containerFactory,
+                            long delayForFirstStart, long delayBetweenTasks, TimeUnit timeUnit) {
+    this.batchExecutorService = batchExecutorService;
+    this.processingQueue = processingQueue;
     this.queue = queue;
     this.sqContainer = sqContainer;
     this.containerFactory = containerFactory;
-    this.executorService = Executors.newSingleThreadScheduledExecutor(newThreadFactory());
 
     this.delayBetweenTasks = delayBetweenTasks;
     this.delayForFirstStart = delayForFirstStart;
     this.timeUnit = timeUnit;
   }
 
-  @Override
-  public void start() {
-    // do nothing because we want to wait for the server to finish startup
-  }
-
-  @Override
-  public void stop() {
-    executorService.shutdown();
-  }
-
   public void startAnalysisTaskNow() {
-    executorService.execute(new ComputationThread(queue, sqContainer, containerFactory));
+    batchExecutorService.execute(new AddBatchProcessingCETaskRunnable());
   }
 
   @Override
   public void onServerStart(Server server) {
-    executorService.scheduleAtFixedRate(new ComputationThread(queue, sqContainer, containerFactory), delayForFirstStart, delayBetweenTasks, timeUnit);
+    batchExecutorService.scheduleAtFixedRate(new AddBatchProcessingCETaskRunnable(), delayForFirstStart, delayBetweenTasks, timeUnit);
   }
 
-  private static ThreadFactory newThreadFactory() {
-    return new ThreadFactoryBuilder()
-      .setNameFormat(THREAD_NAME_PREFIX + "%d").setPriority(Thread.MIN_PRIORITY).build();
+  private class AddBatchProcessingCETaskRunnable implements Runnable {
+    @Override
+    public void run() {
+      processingQueue.addTask(new ReportProcessingTask(queue, sqContainer, containerFactory));
+    }
   }
 }
