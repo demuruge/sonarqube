@@ -20,74 +20,71 @@
 
 package org.sonar.server.computation;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.DisableOnDebug;
-import org.junit.rules.TestRule;
-import org.junit.rules.Timeout;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import org.sonar.api.platform.Server;
 import org.sonar.core.platform.ComponentContainer;
-import org.sonar.server.computation.container.ContainerFactory;
 
-import static org.mockito.Mockito.atLeastOnce;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class ReportProcessingSchedulerTest {
 
-  @Rule
-  public TestRule timeout = new DisableOnDebug(Timeout.seconds(60));
+  ComputeEngineBatchExecutorService batchExecutorService = mock(ComputeEngineBatchExecutorService.class);
+  SimpleComputeEngineProcessingQueue processingQueue = new SimpleComputeEngineProcessingQueue();
+  ReportQueue queue = mock(ReportQueue.class);
+  ComponentContainer componentContainer = mock(ComponentContainer.class);
 
-  ReportProcessingScheduler underTest;
-  ReportQueue queue;
-  ComponentContainer componentContainer;
-  ContainerFactory containerFactory;
-
-  @Before
-  public void before() {
-    this.queue = mock(ReportQueue.class);
-    this.componentContainer = mock(ComponentContainer.class);
-    this.containerFactory = mock(ContainerFactory.class);
-  }
-
-  @After
-  public void after() {
-    underTest.stop();
-  }
+  ReportProcessingScheduler underTest = new ReportProcessingScheduler(batchExecutorService, processingQueue, queue, componentContainer);
 
   @Test
-  public void call_findAndBook_when_launching_a_recurrent_task() throws Exception {
-    underTest = new ReportProcessingScheduler(batchExecutorService, processingQueue, queue, componentContainer, containerFactory, 0, 1, TimeUnit.MILLISECONDS);
+  public void schedule_at_fixed_rate_adding_a_ReportProcessingTask_to_the_queue() throws Exception {
+    when(batchExecutorService.scheduleAtFixedRate(any(Runnable.class), eq(0L), eq(10L), eq(TimeUnit.SECONDS)))
+      .thenAnswer(new ExecuteFirstArgAsRunnable());
 
     underTest.onServerStart(mock(Server.class));
 
-    sleep();
-
-    verify(queue, atLeastOnce()).pop();
+    assertThat(processingQueue.getTasks()).hasSize(1);
+    assertThat(processingQueue.getTasks().iterator().next()).isInstanceOf(ReportProcessingTask.class);
   }
 
   @Test
-  public void call_findAndBook_when_executing_task_immediately() throws Exception {
-    underTest = new ReportProcessingScheduler(batchExecutorService, processingQueue, queue, componentContainer, containerFactory, 1, 1, TimeUnit.HOURS);
-    underTest.start();
+  public void adds_immediately_a_ReportProcessingTask_to_the_queue() throws Exception {
+    doAnswer(new ExecuteFirstArgAsRunnable()).when(batchExecutorService).execute(any(Runnable.class));
 
     underTest.startAnalysisTaskNow();
 
-    sleep();
-
-    verify(queue, atLeastOnce()).pop();
+    assertThat(processingQueue.getTasks()).hasSize(1);
+    assertThat(processingQueue.getTasks().iterator().next()).isInstanceOf(ReportProcessingTask.class);
   }
 
-  @Test
-  public void test_real_constructor() throws Exception {
-    underTest = new ReportProcessingScheduler(batchExecutorService, processingQueue, queue, componentContainer);
-    underTest.start();
+  private static class SimpleComputeEngineProcessingQueue implements ComputeEngineProcessingQueue {
+    private final List<ComputeEngineTask> tasks = new ArrayList<>();
+
+    @Override
+    public void addTask(ComputeEngineTask task) {
+      tasks.add(task);
+    }
+
+    public List<ComputeEngineTask> getTasks() {
+      return tasks;
+    }
   }
 
-  private void sleep() throws InterruptedException {
-    TimeUnit.MILLISECONDS.sleep(500L);
+  private static class ExecuteFirstArgAsRunnable implements Answer<Object> {
+    @Override
+    public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+      Runnable runnable = (Runnable) invocationOnMock.getArguments()[0];
+      runnable.run();
+      return null;
+    }
   }
 }

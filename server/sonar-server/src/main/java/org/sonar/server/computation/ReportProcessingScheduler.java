@@ -20,7 +20,6 @@
 
 package org.sonar.server.computation;
 
-import com.google.common.annotations.VisibleForTesting;
 import java.util.concurrent.TimeUnit;
 import org.sonar.api.platform.Server;
 import org.sonar.api.platform.ServerStartHandler;
@@ -55,22 +54,6 @@ public class ReportProcessingScheduler implements ServerStartHandler {
     this.delayBetweenTasks = 10;
     this.delayForFirstStart = 0;
     this.timeUnit = TimeUnit.SECONDS;
-  }
-
-  @VisibleForTesting
-  ReportProcessingScheduler(ComputeEngineBatchExecutorService batchExecutorService,
-                            ComputeEngineProcessingQueue processingQueue,
-                            ReportQueue queue, ComponentContainer sqContainer, ContainerFactory containerFactory,
-                            long delayForFirstStart, long delayBetweenTasks, TimeUnit timeUnit) {
-    this.batchExecutorService = batchExecutorService;
-    this.processingQueue = processingQueue;
-    this.queue = queue;
-    this.sqContainer = sqContainer;
-    this.containerFactory = containerFactory;
-
-    this.delayBetweenTasks = delayBetweenTasks;
-    this.delayForFirstStart = delayForFirstStart;
-    this.timeUnit = timeUnit;
   }
 
   public void startAnalysisTaskNow() {
